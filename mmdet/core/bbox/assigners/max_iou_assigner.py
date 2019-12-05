@@ -1,5 +1,5 @@
 import torch
-
+import numpy as np
 from ..geometry import bbox_overlaps
 from .assign_result import AssignResult
 from .base_assigner import BaseAssigner
@@ -110,6 +110,486 @@ class MaxIoUAssigner(BaseAssigner):
             if assign_result.labels is not None:
                 assign_result.labels = assign_result.labels.to(device)
         return assign_result
+
+    def assign_IoU(self, gt_bboxes, img_meta, reg_sample=False, num_sample=64, fraction=0.25):
+        new_bboxes_list = []
+        iou_targets_list = []
+        bbox_targets_list = []
+        gt_indexes_list = []
+        num_random = 500
+        count = int(num_sample * fraction)
+        for i in range(gt_bboxes.shape[0]):
+            cnt = 0
+            gt_bbox = gt_bboxes[i].unsqueeze(0)
+            max_shape = img_meta['img_shape']
+            # before jittering
+            cxcy = (gt_bbox[:, 2:4] + gt_bbox[:, :2]) / 2
+            wh = (gt_bbox[:, 2:4] - gt_bbox[:, :2]).abs()
+
+            # generate samples for 0.5-0.6
+            offset_scope = 0.75
+            wh_scope_bottom = 0.5
+            wh_scope_top = 2
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_5 = (iou[:, 0] > 0.5) & (iou[:, 0] <= 0.6)
+
+            iou_all = bbox_overlaps(new_bbox_all, gt_bboxes)
+            _, index = iou_all.max(dim=1)
+            inds_5 = (index == i) & inds_5
+
+            new_bbox = new_bbox_all[inds_5, :]
+            iou_targets = iou[inds_5, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+
+            # generate samples for 0.6-0.7
+            offset_scope = 0.5
+            wh_scope_bottom = 0.6
+            wh_scope_top = 1.6
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_6 = (iou[:, 0] > 0.6) & (iou[:, 0] <= 0.7)
+
+            iou_all = bbox_overlaps(new_bbox_all, gt_bboxes)
+            _, index = iou_all.max(dim=1)
+            inds_6 = (index == i) & inds_6
+
+            new_bbox = new_bbox_all[inds_6, :]
+            iou_targets = iou[inds_6, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+
+            # generate samples for 0.7-0.8
+            offset_scope = 0.3
+            wh_scope_bottom = 0.7
+            wh_scope_top = 1.4
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_7 = (iou[:, 0] > 0.7) & (iou[:, 0] <= 0.8)
+
+            iou_all = bbox_overlaps(new_bbox_all, gt_bboxes)
+            _, index = iou_all.max(dim=1)
+            inds_7 = (index == i) & inds_7
+
+            new_bbox = new_bbox_all[inds_7, :]
+            iou_targets = iou[inds_7, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+
+            # generate samples for 0.8-1.0
+            offset_scope = 0.125
+            wh_scope_bottom = 0.8
+            wh_scope_top = 1.25
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_8 = iou[:, 0] > 0.8
+
+            iou_all = bbox_overlaps(new_bbox_all, gt_bboxes)
+            _, index = iou_all.max(dim=1)
+            inds_8 = (index == i) & inds_8
+
+            new_bbox = new_bbox_all[inds_8, :]
+            iou_targets = iou[inds_8, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+            if reg_sample:
+                bbox_targets = gt_bbox.expand(cnt, 4)
+                bbox_targets_list.append(bbox_targets)
+            gt_indexes = gt_bbox.new_full((cnt,), i)
+            gt_indexes_list.append(gt_indexes)
+
+        new_bboxes = torch.cat(new_bboxes_list, 0)
+        iou_targets = torch.cat(iou_targets_list, 0)
+        gt_indexes = torch.cat(gt_indexes_list, 0)
+        if reg_sample:
+            bbox_targets = torch.cat(bbox_targets_list, 0)
+            return new_bboxes, iou_targets, gt_indexes, bbox_targets
+        else:
+            return new_bboxes, iou_targets, gt_indexes
+
+    def assign_IoU_2(self, gt_bboxes, img_meta, reg_sample=False, num_sample=64, fraction=0.25):
+        new_bboxes_list = []
+        iou_targets_list = []
+        bbox_targets_list = []
+        gt_indexes_list = []
+        num_random = 500
+        count = int(num_sample * fraction)
+        for i in range(gt_bboxes.shape[0]):
+            cnt = 0
+            gt_bbox = gt_bboxes[i].unsqueeze(0)
+            max_shape = img_meta['img_shape']
+            # before jittering
+            cxcy = (gt_bbox[:, 2:4] + gt_bbox[:, :2]) / 2
+            wh = (gt_bbox[:, 2:4] - gt_bbox[:, :2]).abs()
+
+            # generate samples for 0.6-0.7
+            offset_scope = 0.5
+            wh_scope_bottom = 0.6
+            wh_scope_top = 1.6
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_6 = (iou[:, 0] > 0.6) & (iou[:, 0] <= 0.7)
+            new_bbox = new_bbox_all[inds_6, :]
+            iou_targets = iou[inds_6, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+
+            # generate samples for 0.7-0.8
+            offset_scope = 0.3
+            wh_scope_bottom = 0.7
+            wh_scope_top = 1.4
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_7 = (iou[:, 0] > 0.7) & (iou[:, 0] <= 0.8)
+            new_bbox = new_bbox_all[inds_7, :]
+            iou_targets = iou[inds_7, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+
+            # generate samples for 0.8-0.9
+            offset_scope = 0.125
+            wh_scope_bottom = 0.8
+            wh_scope_top = 1.25
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_8 = iou[:, 0] > 0.8
+            new_bbox = new_bbox_all[inds_8, :]
+            iou_targets = iou[inds_8, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+
+            # generate samples for 0.9-1.0
+            offset_scope = 0.125
+            wh_scope_bottom = 0.9
+            wh_scope_top = 1.25
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_9 = iou[:, 0] > 0.9
+            new_bbox = new_bbox_all[inds_9, :]
+            iou_targets = iou[inds_9, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+
+            if reg_sample:
+                bbox_targets = gt_bbox.expand(cnt, 4)
+                bbox_targets_list.append(bbox_targets)
+            gt_indexes = gt_bbox.new_full((cnt,), i)
+            gt_indexes_list.append(gt_indexes)
+
+        new_bboxes = torch.cat(new_bboxes_list, 0)
+        iou_targets = torch.cat(iou_targets_list, 0)
+        gt_indexes = torch.cat(gt_indexes_list, 0)
+        if reg_sample:
+            bbox_targets = torch.cat(bbox_targets_list, 0)
+            return new_bboxes, iou_targets, gt_indexes, bbox_targets
+        else:
+            return new_bboxes, iou_targets, gt_indexes
+
+    def assign_IoU_3(self, gt_bboxes, img_meta, reg_sample=False, num_sample=60, fraction=1 / 3):
+        new_bboxes_list = []
+        iou_targets_list = []
+        bbox_targets_list = []
+        gt_indexes_list = []
+        num_random = 500
+        count = int(num_sample * fraction)
+        for i in range(gt_bboxes.shape[0]):
+            cnt = 0
+            gt_bbox = gt_bboxes[i].unsqueeze(0)
+            max_shape = img_meta['img_shape']
+            # before jittering
+            cxcy = (gt_bbox[:, 2:4] + gt_bbox[:, :2]) / 2
+            wh = (gt_bbox[:, 2:4] - gt_bbox[:, :2]).abs()
+
+            # generate samples for 0.7-0.8
+            offset_scope = 0.3
+            wh_scope_bottom = 0.7
+            wh_scope_top = 1.4
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_7 = (iou[:, 0] > 0.7) & (iou[:, 0] <= 0.8)
+            new_bbox = new_bbox_all[inds_7, :]
+            iou_targets = iou[inds_7, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+
+            # generate samples for 0.8-0.9
+            offset_scope = 0.125
+            wh_scope_bottom = 0.8
+            wh_scope_top = 1.25
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_8 = iou[:, 0] > 0.8
+            new_bbox = new_bbox_all[inds_8, :]
+            iou_targets = iou[inds_8, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+
+            # generate samples for 0.9-1.0
+            offset_scope = 0.125
+            wh_scope_bottom = 0.9
+            wh_scope_top = 1.25
+            random_offsets = gt_bbox.new_empty(num_random, 2).uniform_(-offset_scope, offset_scope)
+            random_wh = gt_bbox.new_empty(num_random, 2).uniform_(wh_scope_bottom, wh_scope_top)
+
+            # after jittering
+            new_cxcy = cxcy + wh * random_offsets
+            new_wh = wh * random_wh
+            # xywh to xyxy
+            new_x1y1 = (new_cxcy - new_wh / 2)
+            new_x2y2 = (new_cxcy + new_wh / 2)
+            new_bbox_all = torch.cat([new_x1y1, new_x2y2], dim=1)
+            # clip bboxes
+            if max_shape is not None:
+                new_bbox_all[:, 0::2].clamp_(min=0, max=max_shape[1] - 1)
+                new_bbox_all[:, 1::2].clamp_(min=0, max=max_shape[0] - 1)
+            iou = bbox_overlaps(new_bbox_all, gt_bbox)
+            inds_9 = iou[:, 0] > 0.9
+            new_bbox = new_bbox_all[inds_9, :]
+            iou_targets = iou[inds_9, 0]
+            if new_bbox.shape[0] > count:
+                cands = np.arange(new_bbox.shape[0])
+                np.random.shuffle(cands)
+
+                rand_inds = cands[:count]
+                rand_inds = torch.from_numpy(rand_inds).long().to(new_bbox.device)
+                new_bbox = new_bbox[rand_inds, :]
+                iou_targets = iou_targets[rand_inds]
+            new_bboxes_list.append(new_bbox)
+            iou_targets_list.append(iou_targets)
+            cnt += new_bbox.shape[0]
+
+            if reg_sample:
+                bbox_targets = gt_bbox.expand(cnt, 4)
+                bbox_targets_list.append(bbox_targets)
+            gt_indexes = gt_bbox.new_full((cnt,), i)
+            gt_indexes_list.append(gt_indexes)
+
+        new_bboxes = torch.cat(new_bboxes_list, 0)
+        iou_targets = torch.cat(iou_targets_list, 0)
+        gt_indexes = torch.cat(gt_indexes_list, 0)
+        if reg_sample:
+            bbox_targets = torch.cat(bbox_targets_list, 0)
+            return new_bboxes, iou_targets, gt_indexes, bbox_targets
+        else:
+            return new_bboxes, iou_targets, gt_indexes
 
     def assign_wrt_overlaps(self, overlaps, gt_labels=None):
         """Assign w.r.t. the overlaps of bboxes with gts.

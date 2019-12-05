@@ -24,6 +24,10 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
                  rpn_head=None,
                  bbox_roi_extractor=None,
                  bbox_head=None,
+                 IoU_roi_extractor=None,
+                 IoU_head=None,
+                 reg_roi_extractor=None,
+                 reg_head=None,
                  mask_roi_extractor=None,
                  mask_head=None,
                  train_cfg=None,
@@ -45,6 +49,26 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
             self.bbox_roi_extractor = builder.build_roi_extractor(
                 bbox_roi_extractor)
             self.bbox_head = builder.build_head(bbox_head)
+
+        if IoU_head is not None:
+            if IoU_roi_extractor is not None:
+                self.IoU_roi_extractor = builder.build_roi_extractor(
+                    IoU_roi_extractor)
+                self.share_roi_extractor = False
+            else:
+                self.share_roi_extractor = True
+                self.IoU_roi_extractor = self.bbox_roi_extractor
+            self.IoU_head = builder.build_head(IoU_head)
+
+        if reg_head is not None:
+            if reg_roi_extractor is not None:
+                self.reg_roi_extractor = builder.build_roi_extractor(
+                    reg_roi_extractor)
+                self.share_roi_extractor = False
+            else:
+                self.share_roi_extractor = True
+                self.reg_roi_extractor = self.bbox_roi_extractor
+            self.reg_head = builder.build_head(reg_head)
 
         if mask_head is not None:
             if mask_roi_extractor is not None:
@@ -192,6 +216,10 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
             if gt_bboxes_ignore is None:
                 gt_bboxes_ignore = [None for _ in range(num_imgs)]
             sampling_results = []
+            IoU_sampling_results = []
+            IoU_targets_results = []
+            gt_indexes_results = []
+            bbox_targets_results = []
             for i in range(num_imgs):
                 assign_result = bbox_assigner.assign(proposal_list[i],
                                                      gt_bboxes[i],
@@ -204,6 +232,15 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
                     gt_labels[i],
                     feats=[lvl_feat[i][None] for lvl_feat in x])
                 sampling_results.append(sampling_result)
+                # generate samples
+                if self.with_IoU or self.with_reg:
+                    IoU_bbox_sample, IoU_targets, gt_indexes, bbox_targets = bbox_assigner.assign_IoU(gt_bboxes[i],
+                                                                                                      img_meta[i],
+                                                                                                      reg_sample=True)
+                    IoU_sampling_results.append(IoU_bbox_sample)
+                    IoU_targets_results.append(IoU_targets)
+                    gt_indexes_results.append(gt_indexes)
+                    bbox_targets_results.append(bbox_targets)
 
         # bbox head forward and loss
         if self.with_bbox:
@@ -222,6 +259,60 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
                                             *bbox_targets)
             losses.update(loss_bbox)
 
+        if self.with_IoU:
+            IoU_rois = bbox2roi([IoU_bbox_sample for IoU_bbox_sample in IoU_sampling_results])
+            for i in range(len(gt_indexes_results)):
+                gt_indexes_results[i] = 100 * i + gt_indexes_results[i]
+            IoU_targets = torch.cat(IoU_targets_results, 0)
+            gt_indexes = torch.cat(gt_indexes_results, 0)
+            bbox_targets = torch.cat(bbox_targets_results, 0)
+            '''
+            num_sample = 1024
+            if IoU_targets.shape[0] > num_sample:
+                cands = np.arange(IoU_targets.shape[0])
+                np.random.shuffle(cands)
+                rand_inds = cands[:num_sample]
+                rand_inds = torch.from_numpy(rand_inds).long().to(IoU_targets.device)
+                IoU_targets = IoU_targets[rand_inds]
+                IoU_rois    = IoU_rois[rand_inds, :]
+                bbox_targets = bbox_targets[rand_inds, :]
+                gt_indexes  = gt_indexes[rand_inds]
+            '''
+            # TODO: a more flexible way to decide which feature maps to use
+            IoU_bbox_feats = self.IoU_roi_extractor(
+                x[:self.IoU_roi_extractor.num_inputs], IoU_rois)
+            if self.with_shared_head:
+                IoU_bbox_feats = self.shared_head(IoU_bbox_feats)
+            if self.with_reg:
+                reg_bbox_feats = self.reg_roi_extractor(
+                    x[:self.reg_roi_extractor.num_inputs], IoU_rois)
+                if self.with_shared_head:
+                    reg_bbox_feats = self.shared_head(reg_bbox_feats)
+                bbox_targets = self.reg_head.get_target(IoU_rois[:, 1:], bbox_targets)
+                IoU_pred = self.IoU_head(IoU_bbox_feats)
+                loss_IoU = self.IoU_head.loss(IoU_pred, IoU_targets, gt_indexes)
+                losses.update(loss_IoU)
+                reg_pred = self.reg_head(reg_bbox_feats)
+                loss_reg = self.reg_head.loss(reg_pred, bbox_targets, IoU_targets)
+                losses.update(loss_reg)
+            else:
+                bbox_targets = self.IoU_head.get_target(IoU_rois[:, 1:], bbox_targets)
+                IoU_pred, bbox_pred = self.IoU_head(IoU_bbox_feats)
+                loss_IoU = self.IoU_head.loss(bbox_pred, bbox_targets, IoU_pred, IoU_targets, gt_indexes)
+                losses.update(loss_IoU)
+
+        if self.with_reg and (not self.with_IoU):
+            reg_rois = bbox2roi([IoU_bbox_sample for IoU_bbox_sample in IoU_sampling_results])
+            IoU_targets = torch.cat(IoU_targets_results, 0)
+            bbox_targets = torch.cat(bbox_targets_results, 0)
+            reg_bbox_feats = self.reg_roi_extractor(
+                x[:self.reg_roi_extractor.num_inputs], reg_rois)
+            if self.with_shared_head:
+                reg_bbox_feats = self.shared_head(reg_bbox_feats)
+            bbox_targets = self.reg_head.get_target(reg_rois[:, 1:], bbox_targets)
+            reg_pred = self.reg_head(reg_bbox_feats)
+            loss_reg = self.reg_head.loss(reg_pred, bbox_targets, IoU_targets)
+            losses.update(loss_reg)
         # mask head forward and loss
         if self.with_mask:
             if not self.share_roi_extractor:

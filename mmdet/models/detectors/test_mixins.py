@@ -49,10 +49,62 @@ class BBoxTestMixin(object):
             x[:len(self.bbox_roi_extractor.featmap_strides)], rois)
         if self.with_shared_head:
             roi_feats = self.shared_head(roi_feats)
-        cls_score, bbox_pred = self.bbox_head(roi_feats)
         img_shape = img_meta[0]['img_shape']
         scale_factor = img_meta[0]['scale_factor']
-        det_bboxes, det_labels = self.bbox_head.get_det_bboxes(
+
+        if self.with_IoU:
+            cls_score, _ = self.bbox_head(roi_feats)
+            first_IoU_pred, bbox_pred = self.IoU_head(roi_feats)
+            bboxes = self.bbox_head.get_first_det_bboxes(rois, bbox_pred, img_shape)
+
+            zeros = bboxes.new_full((bboxes.shape[0], 1), 0)
+            bboxes = torch.cat((zeros, bboxes), dim=1)
+            bboxes_feats = self.bbox_roi_extractor(
+                x[:len(self.bbox_roi_extractor.featmap_strides)], bboxes)
+            if self.with_shared_head:
+                bboxes_feats = self.shared_head(bboxes_feats)
+
+            IoU_pred, bbox_pred = self.IoU_head(bboxes_feats)
+            det_bboxes, det_labels = self.bbox_head.get_final_det_bboxes(
+                bboxes,
+                cls_score,
+                IoU_pred,
+                img_shape,
+                scale_factor,
+                rescale=rescale,
+                cfg=rcnn_test_cfg)
+        else:
+            cls_score, bbox_pred = self.bbox_head(roi_feats)
+            det_bboxes, det_labels = self.bbox_head.get_det_bboxes(
+                rois,
+                cls_score,
+                bbox_pred,
+                img_shape,
+                scale_factor,
+                rescale=rescale,
+                cfg=rcnn_test_cfg)
+        return det_bboxes, det_labels
+
+    def simple_test_bboxes_reg_separate(self,
+                                        x,
+                                        img_meta,
+                                        proposals,
+                                        rcnn_test_cfg,
+                                        rescale=False, gt_bboxes=None, gt_labels=None):
+        """Test only det bboxes without augmentation."""
+        rois = bbox2roi(proposals)
+        roi_feats = self.bbox_roi_extractor(
+            x[:len(self.bbox_roi_extractor.featmap_strides)], rois)
+        if self.with_shared_head:
+            roi_feats = self.shared_head(roi_feats)
+        img_shape = img_meta[0]['img_shape']
+        scale_factor = img_meta[0]['scale_factor']
+
+        # if self.bbox_head.with_IoU:
+        cls_score, _ = self.bbox_head(roi_feats)
+        bbox_pred = self.reg_head(roi_feats)
+
+        det_bboxes, det_labels= self.bbox_head.get_det_bboxes(
             rois,
             cls_score,
             bbox_pred,

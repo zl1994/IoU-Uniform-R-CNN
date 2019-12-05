@@ -34,6 +34,14 @@ class BaseDetector(nn.Module):
     def with_mask(self):
         return hasattr(self, 'mask_head') and self.mask_head is not None
 
+    @property
+    def with_IoU(self):
+        return hasattr(self, 'IoU_head') and self.IoU_head is not None
+
+    @property
+    def with_reg(self):
+        return hasattr(self, 'reg_head') and self.reg_head is not None
+
     @abstractmethod
     def extract_feat(self, imgs):
         pass
