@@ -9,13 +9,13 @@ Please follow official [installation](https://github.com/open-mmlab/mmdetection/
 ``./tools/dist_train.sh ${CONFIG_FILE} ${GPU_NUM} [--validate] [other_optional_args]``
 Note:
 - Config files of IoU-Uniform R-CNN:
-  configs/faster_rcnn_r50_fpn_1x_IoU_reg.py
-  configs/faster_rcnn_r101_fpn_1x_IoU_reg.py
-  configs/cascade_rcnn_r50_fpn_IoU_reg_1x.py
-  configs/cascade_rcnn_r101_fpn_IoU_reg_1x.py
-  configs/pascal_voc/faster_rcnn_r50_fpn_1x_IoU_reg_voc0712.py
-  configs/pascal_voc/faster_rcnn_r50_fpn_1x_reg_separate_voc0712.py
-  configs/pascal_voc/cascade_rcnn_r50_fpn_1x_IoU_reg_voc0712.py
+  - configs/faster_rcnn_r50_fpn_1x_IoU_reg.py
+  - configs/faster_rcnn_r101_fpn_1x_IoU_reg.py
+  - configs/cascade_rcnn_r50_fpn_IoU_reg_1x.py
+  - configs/cascade_rcnn_r101_fpn_IoU_reg_1x.py
+  - configs/pascal_voc/faster_rcnn_r50_fpn_1x_IoU_reg_voc0712.py
+  - configs/pascal_voc/faster_rcnn_r50_fpn_1x_reg_separate_voc0712.py
+  - configs/pascal_voc/cascade_rcnn_r50_fpn_1x_IoU_reg_voc0712.py
 
 - We train IoU-Uniform R-CNN and accompanied detectors with 2 GPUs and 2 img/GPU. According to the Linear Scaling Rule, you need to set the learning rate proportional to the batch size if you use different GPUs or images per GPU.
 
