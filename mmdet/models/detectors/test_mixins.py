@@ -55,7 +55,7 @@ class BBoxTestMixin(object):
         if self.with_IoU:
             cls_score, _ = self.bbox_head(roi_feats)
             first_IoU_pred, bbox_pred = self.IoU_head(roi_feats)
-            bboxes = self.bbox_head.get_first_det_bboxes(rois, bbox_pred, img_shape)
+            bboxes = self.IoU_head.get_first_det_bboxes(rois, bbox_pred, img_shape)
 
             zeros = bboxes.new_full((bboxes.shape[0], 1), 0)
             bboxes = torch.cat((zeros, bboxes), dim=1)
@@ -65,7 +65,7 @@ class BBoxTestMixin(object):
                 bboxes_feats = self.shared_head(bboxes_feats)
 
             IoU_pred, bbox_pred = self.IoU_head(bboxes_feats)
-            det_bboxes, det_labels = self.bbox_head.get_final_det_bboxes(
+            det_bboxes, det_labels = self.IoU_head.get_final_det_bboxes(
                 bboxes,
                 cls_score,
                 IoU_pred,
