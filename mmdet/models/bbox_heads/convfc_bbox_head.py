@@ -904,3 +904,50 @@ class SharedFCBBoxHead(ConvFCBBoxHead):
             fc_out_channels=fc_out_channels,
             *args,
             **kwargs)
+
+    @force_fp32(apply_to=('cls_score', 'bbox_pred'))
+    def get_first_det_bboxes(self,
+                             rois,
+                             bbox_pred,
+                             img_shape):
+
+        if bbox_pred is not None:
+            bboxes = delta2bbox(rois[:, 1:], bbox_pred, self.target_means,
+                                self.target_stds, img_shape)
+        else:
+            bboxes = rois[:, 1:].clone()
+            if img_shape is not None:
+                bboxes[:, [0, 2]].clamp_(min=0, max=img_shape[1] - 1)
+                bboxes[:, [1, 3]].clamp_(min=0, max=img_shape[0] - 1)
+
+        return bboxes
+
+    @force_fp32(apply_to=('cls_score', 'bbox_pred', 'IoU_pred'))
+    def get_final_det_bboxes(self,
+                             bboxes,
+                             cls_score,
+                             IoU_pred,
+                             img_shape,
+                             scale_factor,
+                             rescale=False,
+                             cfg=None):
+        if isinstance(cls_score, list):
+            cls_score = sum(cls_score) / float(len(cls_score))
+        scores = F.softmax(cls_score, dim=1) if cls_score is not None else None
+
+        IoU_pred = IoU_pred.view(-1)
+        bboxes = bboxes[:, 1:]
+        if rescale:
+            if isinstance(scale_factor, float):
+                bboxes /= scale_factor
+            else:
+                bboxes /= torch.from_numpy(scale_factor).to(bboxes.device)
+
+        if cfg is None:
+            return bboxes, scores
+        else:
+            det_bboxes, det_labels = multiclass_nms(bboxes, scores,
+                                                    cfg.score_thr, cfg.nms,
+                                                    cfg.max_per_img, score_factors=IoU_pred)
+
+            return det_bboxes, det_labels

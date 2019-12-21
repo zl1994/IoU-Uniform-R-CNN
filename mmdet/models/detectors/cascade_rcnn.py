@@ -828,7 +828,7 @@ class CascadeRCNN_IoU(BaseDetector, RPNTestMixin):
                 gt_bbox_targets = IoU_head.get_target(IoU_rois[:, 1:], gt_bbox_targets)
 
                 IoU_pred, bbox_pred = IoU_head(IoU_bbox_feats)
-                loss_IoU = IoU_head.loss(bbox_pred, gt_bbox_targets, IoU_pred, IoU_targets, gt_indexes, IoU_rank=True)
+                loss_IoU = IoU_head.loss(bbox_pred, gt_bbox_targets, IoU_pred, IoU_targets, gt_indexes)
                 losses.update(loss_IoU)
                 for name, value in loss_IoU.items():
                     losses['s{}.{}'.format(i, name)] = (
@@ -971,14 +971,14 @@ class CascadeRCNN_IoU(BaseDetector, RPNTestMixin):
         cls_score_mean = sum(ms_scores) / self.num_stages
         IoU_pred = ms_IoUs[-1]
 
-        det_bboxes, det_labels, _ = bbox_head.get_final_det_bboxes(
+        det_bboxes, det_labels = bbox_head.get_final_det_bboxes(
             bboxes,
             cls_score_mean,
             IoU_pred,
             img_shape,
             scale_factor,
             rescale=rescale,
-            cfg=rcnn_test_cfg, gt_bboxes=gt_bboxes, gt_labels=gt_labels)
+            cfg=rcnn_test_cfg)
 
 
         bbox_result = bbox2result(det_bboxes, det_labels,
