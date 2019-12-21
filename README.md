@@ -1,5 +1,5 @@
 # IoU-Uniform R-CNN
-This repository provides the codes for paper "IoU-Uniform R-CNN: Breaking Through the Limitations of RPN"
+This repository provides the codes for paper [IoU-Uniform R-CNN](https://arxiv.org/abs/1912.05190)
 - This project is based on [mmdetection](https://github.com/open-mmlab/mmdetection) framework.
 
 ## Setup
